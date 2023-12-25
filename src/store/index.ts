@@ -16,7 +16,11 @@ class Graph {
   #mountPromise: Promise<void>;
 
   render(canvas: HTMLCanvasElement, progress: number) {
-    if (!this.isMounted()) {
+    if (
+      !this.isMounted() ||
+      this.#canvas.width === 0 ||
+      this.#canvas.height === 0
+    ) {
       return;
     }
     const ctx = canvas.getContext("2d");
@@ -93,7 +97,7 @@ class Graph {
 let isPlaying = false;
 const graphs: Array<Graph> = [];
 const count = 50;
-const preMountCount = 2; // 预加载个数
+let preMountCount = 2; // 预加载个数
 
 for (let i = 0; i < count; i++) {
   graphs.push(new Graph());
@@ -102,10 +106,14 @@ for (let i = 0; i < count; i++) {
 async function play(
   canvas: HTMLCanvasElement,
   url: string,
-  { onProgress }: { onProgress: (arg0: number) => void },
+  {
+    onProgress,
+    preloadCount = 2,
+  }: { onProgress: (arg0: number) => void; preloadCount: number },
 ) {
   isPlaying = true;
   let curTime = 0;
+  preMountCount = preloadCount;
   const graphDuration = 100; // ms
   const allDuration = graphDuration * count; // ms
   const calcIndex = () => {

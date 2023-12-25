@@ -1,17 +1,18 @@
 import { useRef, useState } from "react";
 import { play, stop } from "./store";
 import pic from "/image/pic.jpg?url";
+import picSmall from "/image/pic-small.jpg?url";
 
 function App() {
-  const [type, setType] = useState<"main-thread" | "worker-thread">(
-    "main-thread",
-  );
+  const [image, setImage] = useState<string>("small-image");
+  const [type, setType] = useState<string>("main-thread");
+  const [preload, setPreload] = useState<number>(2);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const handlePlay = () => {
-    play(canvasRef.current, pic, {
+    play(canvasRef.current, image === "big-image" ? pic : picSmall, {
       onProgress: (value: number) => {
         const nextProgress = value * 100;
         setProgress(nextProgress);
@@ -20,6 +21,7 @@ function App() {
           setIsPlaying(false);
         }
       },
+      preloadCount: preload,
     }).then(() => {
       setIsPlaying(true);
     });
@@ -39,19 +41,42 @@ function App() {
         )}
         <h1 className="text-6xl font-bold font-mono">Canvas Render</h1>
       </div>
-      <label className="swap my-6">
-        <input
-          type="checkbox"
-          checked={type === "main-thread"}
-          onChange={() => {
-            setType(type === "main-thread" ? "worker-thread" : "main-thread");
-          }}
-        />
-        <div className="swap-on text-3xl">main-thread</div>
-        <div className="swap-off text-3xl">worker-thread</div>
-      </label>
+      <div className="my-6 flex">
+        <select
+          value={image}
+          className="select max-w-xs mx-4"
+          onChange={event => setImage(event.target.value as unknown as string)}
+        >
+          <option value="big-image">Big Image(8.8MB)</option>
+          <option value="small-image">Small Image(17.9KB)</option>
+        </select>
+        <select
+          value={type}
+          className="select max-w-xs mx-4"
+          onChange={event => setType(event.target.value as unknown as string)}
+        >
+          <option value="main-thread">Main Thread</option>
+          <option value="worker-thread">Worker Thread</option>
+        </select>
+        <select
+          value={preload}
+          className="select max-w-xs mx-4"
+          onChange={event =>
+            setPreload(event.target.value as unknown as number)
+          }
+        >
+          <option value={0}>Preload: 0</option>
+          <option value={2}>Preload: 2</option>
+          <option value={4}>Preload: 4</option>
+        </select>
+      </div>
       <div className="p-4 bg-gray-200 mb-6 mockup-window border border-base-300">
-        <canvas ref={canvasRef} width={912} height={512} className="bg-white w-{912} h-{512}" />
+        <canvas
+          ref={canvasRef}
+          width={912}
+          height={512}
+          className="bg-white w-{912} h-{512}"
+        />
       </div>
       <div className="flex items-center content-center">
         {isPlaying ? (
