@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { play, stop } from "./store";
-import pic from "/image/pic.jpg?url";
-import picSmall from "/image/pic-small.jpg?url";
+import picSm from "/image/pic-sm.jpg?url";
+import picMd from "/image/pic-md.jpg?url";
+import picLg from "/image/pic-lg.jpg?url";
 
 function App() {
-  const [image, setImage] = useState<string>("small-image");
+  const [image, setImage] = useState<string>("image-sm");
   const [type, setType] = useState<string>("main-thread");
   const [preload, setPreload] = useState<number>(2);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -12,7 +13,18 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const handlePlay = () => {
-    play(canvasRef.current, image === "big-image" ? pic : picSmall, {
+    let pic = "";
+    switch (image) {
+      case "image-lg":
+        pic = picLg;
+        break;
+      case "image-sm":
+        pic = picSm;
+        break;
+      default:
+        pic = picMd;
+    }
+    play(canvasRef.current, pic, {
       onProgress: (value: number) => {
         const nextProgress = value * 100;
         setProgress(nextProgress);
@@ -47,8 +59,9 @@ function App() {
           className="select max-w-xs mx-4"
           onChange={event => setImage(event.target.value as unknown as string)}
         >
-          <option value="big-image">Big Image(8.8MB)</option>
-          <option value="small-image">Small Image(17.9KB)</option>
+          <option value="image-sm">Small Image(17.9KB)</option>
+          <option value="image-md">Medium Image(896KB)</option>
+          <option value="image-lg">Large Image(8.8MB)</option>
         </select>
         <select
           value={type}
