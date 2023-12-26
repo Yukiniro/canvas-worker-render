@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ESNext",
+    "module": "esnext",
     "declaration": true,
     "outDir": "dist",
     "declarationMap": true,

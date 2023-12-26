@@ -1,9 +1,15 @@
 import { clamp } from "lodash-es";
+import { nanoid } from "nanoid";
+import workerUrl from "../worker/index.worker.ts?url";
 
-const canvasPool: Array<HTMLCanvasElement> = [];
+const worker = new Worker(new URL(workerUrl, import.meta.url), { type: "module" });
+const canvasPool: Array<HTMLCanvasElement | OffscreenCanvas> = [];
 const imagePool: Array<HTMLImageElement> = [];
 
-function createCanvas() {
+function createCanvas(useOffscreen: boolean) {
+  if (useOffscreen) {
+    return new OffscreenCanvas(1, 1);
+  }
   return document.createElement("canvas");
 }
 
@@ -12,15 +18,11 @@ function createImage() {
 }
 
 class Graph {
-  #canvas: HTMLCanvasElement;
+  #canvas: HTMLCanvasElement | OffscreenCanvas;
   #mountPromise: Promise<void>;
 
   render(canvas: HTMLCanvasElement, progress: number) {
-    if (
-      !this.isMounted() ||
-      this.#canvas.width === 0 ||
-      this.#canvas.height === 0
-    ) {
+    if (!this.isMounted() || this.#canvas.width === 0 || this.#canvas.height === 0) {
       return;
     }
     const ctx = canvas.getContext("2d");
@@ -33,7 +35,7 @@ class Graph {
     ctx.drawImage(this.#canvas, x, y, width, height);
   }
 
-  async mount(url: string) {
+  async mount(url: string, threadType: string = "main-thread") {
     if (this.isMounted()) {
       return;
     }
@@ -45,15 +47,35 @@ class Graph {
     }
 
     this.#mountPromise = (async () => {
-      this.#canvas = canvasPool.pop() || createCanvas();
-      const image = imagePool.pop() || createImage();
-      const img = await this.loadImage(image, url);
-      this.#canvas.width = img.naturalWidth;
-      this.#canvas.height = img.naturalHeight;
-      this.#canvas.getContext("2d").drawImage(img, 0, 0);
-      image.onload = null;
-      image.onerror = null;
-      imagePool.push(image);
+      const source = await decodeImage(url, threadType);
+      const width = source.width || (source as HTMLImageElement).naturalWidth;
+      const height = source.height || (source as HTMLImageElement).naturalHeight;
+
+      this.#canvas = canvasPool.pop() || createCanvas(source instanceof ImageBitmap);
+      this.#canvas.width = width;
+      this.#canvas.height = height;
+
+      if (source instanceof ImageBitmap) {
+        this.#canvas.getContext("bitmaprenderer").transferFromImageBitmap(source);
+      } else {
+        this.#canvas.getContext("2d").drawImage(source, 0, 0);
+      }
+
+      // this.#canvas.style.position = "fixed";
+      // this.#canvas.style.left = "0";
+      // this.#canvas.style.top = "0";
+      // this.#canvas.style.transform = "scale(0.1)";
+      // this.#canvas.style.transformOrigin = "left top";
+      // document.body.appendChild(this.#canvas);
+
+      if (source instanceof ImageBitmap) {
+        source.close();
+      } else {
+        source.onload = null;
+        source.onerror = null;
+        source.src = "";
+        imagePool.push(source);
+      }
     })();
 
     await this.#mountPromise;
@@ -82,10 +104,7 @@ class Graph {
     return !!this.#mountPromise;
   }
 
-  async loadImage(
-    image: HTMLImageElement,
-    url: string,
-  ): Promise<HTMLImageElement> {
+  async loadImage(image: HTMLImageElement, url: string): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       image.onload = () => resolve(image);
       image.onerror = reject;
@@ -109,7 +128,12 @@ async function play(
   {
     onProgress,
     preloadCount = 2,
-  }: { onProgress: (arg0: number) => void; preloadCount: number },
+    threadType = "main-thread",
+  }: {
+    onProgress: (arg0: number) => void;
+    preloadCount?: number;
+    threadType?: string;
+  },
 ) {
   isPlaying = true;
   let curTime = 0;
@@ -120,7 +144,7 @@ async function play(
     return Math.floor(curTime / graphDuration);
   };
 
-  await graphs[0].mount(url);
+  await graphs[0].mount(url, threadType);
 
   let oldTimestamp = 0;
   let oldGraph = null;
@@ -136,7 +160,7 @@ async function play(
 
     const index = calcIndex();
     const curGraph = graphs[index] || graphs[graphs.length - 1];
-    await curGraph.mount(url);
+    await curGraph.mount(url, threadType);
 
     if (oldGraph && oldGraph !== curGraph) {
       oldGraph.unmount().catch(console.error);
@@ -150,7 +174,7 @@ async function play(
     for (let i = 1; i <= preMountCount; i++) {
       const preGraph = graphs[index + i] || graphs[graphs.length - 1];
       if (!preGraph.isMounted() && !preGraph.isMounting()) {
-        preGraph.mount(url);
+        preGraph.mount(url, threadType).catch(console.error);
       }
     }
 
@@ -164,6 +188,37 @@ async function play(
 async function stop() {
   isPlaying = false;
   await Promise.all(graphs.map(graph => graph.unmount()));
+}
+
+async function decodeImage(url: string, threadType: string): Promise<ImageBitmap | HTMLImageElement> {
+  if (threadType === "main-thread") {
+    const image = imagePool.pop() || createImage();
+    await new Promise((resolve, reject) => {
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = url;
+    });
+    return image;
+  } else if (threadType === "worker-thread-decode") {
+    const decodeId = nanoid();
+    const imageBitmap: ImageBitmap = await new Promise(resolve => {
+      const fn = (msg: { data: { type: any; data: any } }) => {
+        const { type, data } = msg.data;
+        const { id, imageBitmap } = data;
+        if (type === "decodeImage" && id === decodeId) {
+          resolve(imageBitmap);
+          worker.removeEventListener("message", fn);
+        }
+      };
+      worker.addEventListener("message", fn);
+      worker.postMessage({
+        type: "decodeImage",
+        imageSource: url,
+        options: { id: decodeId },
+      });
+    });
+    return imageBitmap;
+  }
 }
 
 export { play, stop };

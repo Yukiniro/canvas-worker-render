@@ -34,6 +34,7 @@ function App() {
         }
       },
       preloadCount: preload,
+      threadType: type,
     }).then(() => {
       setIsPlaying(true);
     });
@@ -48,9 +49,7 @@ function App() {
   return (
     <div className="w-screen h-screen bg-base-100 text-center flex flex-col items-center justify-center">
       <div className="indicator">
-        {isPlaying && (
-          <span className="indicator-item badge badge-primary">playing</span>
-        )}
+        {isPlaying && <span className="indicator-item badge badge-primary">playing</span>}
         <h1 className="text-6xl font-bold font-mono">Canvas Render</h1>
       </div>
       <div className="my-6 flex">
@@ -70,13 +69,12 @@ function App() {
         >
           <option value="main-thread">Main Thread</option>
           <option value="worker-thread">Worker Thread</option>
+          <option value="worker-thread-decode">Worker Thread(only decode)</option>
         </select>
         <select
           value={preload}
           className="select max-w-xs mx-4"
-          onChange={event =>
-            setPreload(event.target.value as unknown as number)
-          }
+          onChange={event => setPreload(event.target.value as unknown as number)}
         >
           <option value={0}>Preload: 0</option>
           <option value={2}>Preload: 2</option>
@@ -84,12 +82,7 @@ function App() {
         </select>
       </div>
       <div className="p-4 bg-gray-200 mb-6 mockup-window border border-base-300">
-        <canvas
-          ref={canvasRef}
-          width={912}
-          height={512}
-          className="bg-white w-{912} h-{512}"
-        />
+        <canvas ref={canvasRef} width={912} height={512} className="bg-white w-{912} h-{512}" />
       </div>
       <div className="flex items-center content-center">
         {isPlaying ? (
@@ -101,11 +94,7 @@ function App() {
             Play
           </button>
         )}
-        <progress
-          className="progress w-96 ml-8"
-          value={progress}
-          max="100"
-        ></progress>
+        <progress className="progress w-96 ml-8" value={progress} max="100"></progress>
       </div>
     </div>
   );
