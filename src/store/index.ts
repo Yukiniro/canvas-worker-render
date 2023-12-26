@@ -6,6 +6,8 @@ import workerUrl from "../worker/index.worker.ts?url";
 const worker = new Worker(new URL(workerUrl, import.meta.url), { type: "module" });
 const canvasPool: Array<HTMLCanvasElement | OffscreenCanvas> = [];
 const imagePool: Array<HTMLImageElement> = [];
+const transferredOffscreenCanvasMap: Map<HTMLCanvasElement, { id: string; offscreenCanvas: OffscreenCanvas }> =
+  new Map();
 
 function createCanvas(useOffscreen?: boolean) {
   if (useOffscreen) {
@@ -48,28 +50,75 @@ class Graph {
     }
 
     this.#mountPromise = (async () => {
-      const source = await decodeImage(url, threadType);
-      const width = source.width || (source as HTMLImageElement).naturalWidth;
-      const height = source.height || (source as HTMLImageElement).naturalHeight;
-      const sourceIsImageBitmap = source instanceof ImageBitmap;
+      if (threadType === "worker-thread") {
+        await new Promise(resolve => {
+          this.#canvas = (canvasPool.pop() || createCanvas()) as HTMLCanvasElement;
+          let offscreenCanvas: OffscreenCanvas = null;
+          let decodeId: string = "";
 
-      this.#canvas = canvasPool.pop() || createCanvas(sourceIsImageBitmap);
-      this.#canvas.width = width;
-      this.#canvas.height = height;
+          const hasTransferred = transferredOffscreenCanvasMap.has(this.#canvas);
+          if (hasTransferred) {
+            const item = transferredOffscreenCanvasMap.get(this.#canvas);
+            decodeId = item.id;
+            offscreenCanvas = item.offscreenCanvas;
+          } else {
+            decodeId = nanoid();
+            offscreenCanvas = this.#canvas.transferControlToOffscreen();
+            transferredOffscreenCanvasMap.set(this.#canvas, { id: decodeId, offscreenCanvas });
+          }
 
-      if (sourceIsImageBitmap) {
-        (this.#canvas as unknown as OffscreenCanvas).getContext("bitmaprenderer").transferFromImageBitmap(source);
+          const fn = (msg: { data: { type: string; id: string } }) => {
+            const { type, id } = msg.data;
+            if (type === "render" && id === decodeId) {
+              worker.removeEventListener("message", fn);
+              resolve(null);
+            }
+          };
+
+          worker.addEventListener("message", fn);
+
+          if (hasTransferred) {
+            worker.postMessage({
+              type: "render",
+              imageSource: url,
+              options: { id: decodeId },
+            });
+          } else {
+            worker.postMessage(
+              {
+                type: "render",
+                offscreenCanvas,
+                imageSource: url,
+                options: { id: decodeId },
+              },
+              [offscreenCanvas],
+            );
+          }
+        });
       } else {
-        (this.#canvas as unknown as HTMLCanvasElement).getContext("2d").drawImage(source, 0, 0);
-      }
+        const source = await decodeImage(url, threadType);
+        const width = source.width || (source as HTMLImageElement).naturalWidth;
+        const height = source.height || (source as HTMLImageElement).naturalHeight;
+        const sourceIsImageBitmap = source instanceof ImageBitmap;
 
-      if (sourceIsImageBitmap) {
-        source.close();
-      } else {
-        source.onload = null;
-        source.onerror = null;
-        source.src = "";
-        imagePool.push(source);
+        this.#canvas = canvasPool.pop() || createCanvas(sourceIsImageBitmap);
+        this.#canvas.width = width;
+        this.#canvas.height = height;
+
+        if (sourceIsImageBitmap) {
+          (this.#canvas as unknown as OffscreenCanvas).getContext("bitmaprenderer").transferFromImageBitmap(source);
+        } else {
+          (this.#canvas as unknown as HTMLCanvasElement).getContext("2d").drawImage(source, 0, 0);
+        }
+
+        if (sourceIsImageBitmap) {
+          source.close();
+        } else {
+          source.onload = null;
+          source.onerror = null;
+          source.src = "";
+          imagePool.push(source);
+        }
       }
     })();
 
@@ -86,13 +135,22 @@ class Graph {
       this.#mountPromise = null;
     }
     canvasPool.push(this.#canvas);
-    this.#canvas.width = 0;
-    this.#canvas.height = 0;
+
+    if (transferredOffscreenCanvasMap.has(this.#canvas as HTMLCanvasElement)) {
+      worker.postMessage({
+        type: "release",
+        id: transferredOffscreenCanvasMap.get(this.#canvas as HTMLCanvasElement).id,
+      });
+    } else {
+      this.#canvas.width = 0;
+      this.#canvas.height = 0;
+    }
+
     this.#canvas = null;
   }
 
   isMounted() {
-    return !!this.#canvas;
+    return !!this.#canvas && !this.isMounting();
   }
 
   isMounting() {
@@ -142,7 +200,7 @@ async function play(
   await graphs[0].mount(url, threadType);
 
   let oldTimestamp = 0;
-  let oldGraph = null;
+  let oldGraph: Graph = null;
   const _play = (timestamp: number) => {
     if (!isPlaying) {
       return;

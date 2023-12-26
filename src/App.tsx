@@ -70,8 +70,8 @@ function App() {
           onChange={event => setType(event.target.value as unknown as string)}
         >
           <option value="main-thread">Main Thread</option>
-          <option value="worker-thread">Worker Thread</option>
-          <option value="worker-thread-decode">Worker Thread(only decode)</option>
+          <option value="worker-thread-decode">Worker Thread(decode)</option>
+          <option value="worker-thread">Worker Thread(decode + render)</option>
         </select>
         <select
           value={preload}
