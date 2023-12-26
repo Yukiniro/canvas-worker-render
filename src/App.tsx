@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { play, stop } from "./store";
+import { useFps } from "./hooks";
 import picSm from "/image/pic-sm.jpg?url";
 import picMd from "/image/pic-md.jpg?url";
 import picLg from "/image/pic-lg.jpg?url";
@@ -10,6 +11,7 @@ function App() {
   const [preload, setPreload] = useState<number>(2);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const fps = useFps();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const handlePlay = () => {
@@ -49,7 +51,7 @@ function App() {
   return (
     <div className="w-screen h-screen bg-base-100 text-center flex flex-col items-center justify-center">
       <div className="indicator">
-        {isPlaying && <span className="indicator-item badge badge-primary">playing</span>}
+        {isPlaying && <span className="indicator-item badge badge-primary">FPS: {fps}</span>}
         <h1 className="text-6xl font-bold font-mono">Canvas Render</h1>
       </div>
       <div className="my-6 flex">
@@ -79,6 +81,8 @@ function App() {
           <option value={0}>Preload: 0</option>
           <option value={2}>Preload: 2</option>
           <option value={4}>Preload: 4</option>
+          <option value={4}>Preload: 6</option>
+          <option value={4}>Preload: 10</option>
         </select>
       </div>
       <div className="p-4 bg-gray-200 mb-6 mockup-window border border-base-300">

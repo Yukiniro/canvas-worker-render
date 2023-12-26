@@ -6,7 +6,7 @@ const worker = new Worker(new URL(workerUrl, import.meta.url), { type: "module" 
 const canvasPool: Array<HTMLCanvasElement | OffscreenCanvas> = [];
 const imagePool: Array<HTMLImageElement> = [];
 
-function createCanvas(useOffscreen: boolean) {
+function createCanvas(useOffscreen?: boolean) {
   if (useOffscreen) {
     return new OffscreenCanvas(1, 1);
   }
@@ -50,25 +50,19 @@ class Graph {
       const source = await decodeImage(url, threadType);
       const width = source.width || (source as HTMLImageElement).naturalWidth;
       const height = source.height || (source as HTMLImageElement).naturalHeight;
+      const sourceIsImageBitmap = source instanceof ImageBitmap;
 
-      this.#canvas = canvasPool.pop() || createCanvas(source instanceof ImageBitmap);
+      this.#canvas = canvasPool.pop() || createCanvas(sourceIsImageBitmap);
       this.#canvas.width = width;
       this.#canvas.height = height;
 
-      if (source instanceof ImageBitmap) {
-        this.#canvas.getContext("bitmaprenderer").transferFromImageBitmap(source);
+      if (sourceIsImageBitmap) {
+        (this.#canvas as unknown as OffscreenCanvas).getContext("bitmaprenderer").transferFromImageBitmap(source);
       } else {
-        this.#canvas.getContext("2d").drawImage(source, 0, 0);
+        (this.#canvas as unknown as HTMLCanvasElement).getContext("2d").drawImage(source, 0, 0);
       }
 
-      // this.#canvas.style.position = "fixed";
-      // this.#canvas.style.left = "0";
-      // this.#canvas.style.top = "0";
-      // this.#canvas.style.transform = "scale(0.1)";
-      // this.#canvas.style.transformOrigin = "left top";
-      // document.body.appendChild(this.#canvas);
-
-      if (source instanceof ImageBitmap) {
+      if (sourceIsImageBitmap) {
         source.close();
       } else {
         source.onload = null;
@@ -191,12 +185,14 @@ async function stop() {
 }
 
 async function decodeImage(url: string, threadType: string): Promise<ImageBitmap | HTMLImageElement> {
+  // 避免图片缓存对测试结果的影响
+  const urlTimestamp = `${url}?t=${Date.now()}`;
   if (threadType === "main-thread") {
     const image = imagePool.pop() || createImage();
     await new Promise((resolve, reject) => {
       image.onload = () => resolve(image);
       image.onerror = reject;
-      image.src = url;
+      image.src = urlTimestamp;
     });
     return image;
   } else if (threadType === "worker-thread-decode") {
@@ -213,7 +209,7 @@ async function decodeImage(url: string, threadType: string): Promise<ImageBitmap
       worker.addEventListener("message", fn);
       worker.postMessage({
         type: "decodeImage",
-        imageSource: url,
+        imageSource: urlTimestamp,
         options: { id: decodeId },
       });
     });
