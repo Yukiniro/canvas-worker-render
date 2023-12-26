@@ -81,8 +81,8 @@ function App() {
           <option value={0}>Preload: 0</option>
           <option value={2}>Preload: 2</option>
           <option value={4}>Preload: 4</option>
-          <option value={4}>Preload: 6</option>
-          <option value={4}>Preload: 10</option>
+          <option value={6}>Preload: 6</option>
+          <option value={10}>Preload: 10</option>
         </select>
       </div>
       <div className="p-4 bg-gray-200 mb-6 mockup-window border border-base-300">

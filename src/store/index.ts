@@ -143,19 +143,27 @@ async function play(
 
   let oldTimestamp = 0;
   let oldGraph = null;
-  const _play = async (timestamp: number) => {
-    if (!isPlaying || curTime > allDuration) {
+  const _play = (timestamp: number) => {
+    if (!isPlaying) {
       return;
     }
 
-    if (oldTimestamp) {
-      curTime += timestamp - oldTimestamp;
+    if (curTime > allDuration) {
+      onProgress && onProgress(1);
+      return;
     }
-    oldTimestamp = timestamp;
 
     const index = calcIndex();
     const curGraph = graphs[index] || graphs[graphs.length - 1];
-    await curGraph.mount(url, threadType);
+
+    if (!curGraph.isMounted()) {
+      if (!curGraph.isMounting()) {
+        curGraph.mount(url, threadType).catch(console.error);
+      }
+      oldTimestamp = timestamp;
+      requestAnimationFrame(_play);
+      return;
+    }
 
     if (oldGraph && oldGraph !== curGraph) {
       oldGraph.unmount().catch(console.error);
@@ -175,6 +183,11 @@ async function play(
 
     onProgress && onProgress(clamp(curTime / allDuration, 0, 1));
     requestAnimationFrame(_play);
+
+    if (oldTimestamp) {
+      curTime += timestamp - oldTimestamp;
+    }
+    oldTimestamp = timestamp;
   };
 
   requestAnimationFrame(_play);
