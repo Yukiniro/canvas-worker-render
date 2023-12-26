@@ -24,7 +24,8 @@ async function decodeImageToVideoFrame(
   let videoFrame = null;
   const types = uniq([imageType, ...MIME_TYPES]);
   for (let i = 0; i < types.length; i++) {
-    // @ts-ignore
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
     const decoder = new ImageDecoder({ type: types[i], data: arrayBuffer });
     try {
       let done = false;
@@ -79,6 +80,7 @@ onmessage = async e => {
     switch (msg.type) {
       case "decodeImage": {
         const data = await decodeImage(msg.imageSource, msg.options);
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-expect-error
         postMessage({ type: "decodeImage", data }, [data.imageBitmap]);
         break;

@@ -1,3 +1,4 @@
+/* eslint-disable react/no-is-mounted */
 import { clamp } from "lodash-es";
 import { nanoid } from "nanoid";
 import workerUrl from "../worker/index.worker.ts?url";
@@ -198,7 +199,7 @@ async function decodeImage(url: string, threadType: string): Promise<ImageBitmap
   } else if (threadType === "worker-thread-decode") {
     const decodeId = nanoid();
     const imageBitmap: ImageBitmap = await new Promise(resolve => {
-      const fn = (msg: { data: { type: any; data: any } }) => {
+      const fn = (msg: { data: { type: string; data: { id: string; imageBitmap: ImageBitmap } } }) => {
         const { type, data } = msg.data;
         const { id, imageBitmap } = data;
         if (type === "decodeImage" && id === decodeId) {
